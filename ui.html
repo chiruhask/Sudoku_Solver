@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Sudoku Solver</title>
+  <style>
+    /* Base reset */
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      display: flex; justify-content: center; align-items: center;
+      min-height: 100vh;
+      background: #2e3440;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    }
+    #container {
+      padding: 20px;
+      background: #eceff4;
+      border-radius: 12px;
+      box-shadow: 0 8px 20px rgba(0,0,0,0.5);
+      text-align: center;
+    }
+    h1 {
+      margin-bottom: 16px;
+      color: #2e3440;
+      font-size: 2em;
+    }
+    /* Blocks of 3x3 */
+    #blocks {
+      display: grid;
+      grid-template: repeat(3, 1fr) / repeat(3, 1fr);
+      gap: 12px;
+      justify-items: center;
+    }
+    .block {
+      display: grid;
+      grid-template: repeat(3, 1fr) / repeat(3, 1fr);
+      background: #d8dee9;
+      padding: 4px;
+      border-radius: 8px;
+      gap: 4px;
+    }
+    .cell {
+      width: 50px; height: 50px;
+      border: none;
+      background: #eceff4;
+      font-size: 1.2em;
+      text-align: center;
+      border-radius: 4px;
+      transition: background 0.3s, box-shadow 0.2s, transform 0.2s;
+    }
+    .cell:focus {
+      outline: none;
+      box-shadow: 0 0 0 3px #81a1c1;
+      transform: scale(1.05);
+    }
+    /* Highlight and pop for individual cell */
+    .cell.pop {
+      transform: scale(1.2);
+      background: #88c0d0;
+    }
+    .cell.placing {
+      animation: placeAnim 0.3s ease;
+      background: #a3be8c;
+    }
+    .cell.removing {
+      animation: removeAnim 0.3s ease;
+      background: #bf616a;
+    }
+    @keyframes placeAnim {
+      0% { transform: scale(0.5); opacity: 0; }
+      100% { transform: scale(1); opacity: 1; }
+    }
+    @keyframes removeAnim {
+      0% { transform: scale(1.2); opacity: 1; }
+      100% { transform: scale(1); opacity: 0.5; }
+    }
+    /* Controls */
+    .controls {
+      margin-top: 20px;
+    }
+    button {
+      margin: 0 8px;
+      padding: 10px 20px;
+      border: none;
+      border-radius: 6px;
+      background: #5e81ac;
+      color: #eceff4;
+      font-size: 1em;
+      cursor: pointer;
+      transition: background 0.2s, transform 0.1s;
+    }
+    button:hover { background: #4c566a; transform: translateY(-2px); }
+    button:active { transform: translateY(0); }
+  </style>
+</head>
+<body>
+  <div id="container">
+    <h1>Sudoku Solver</h1>
+    <div id="blocks"></div>
+    <div class="controls">
+      <button id="new-btn">New Puzzle</button>
+      <button id="solve-btn">Solve</button>
+      <button id="reset-btn">Reset</button>
+    </div>
+  </div>
+  <script>
+    let isSolving = false;
+    const copy = b => b.map(r => r.slice());
+    const firstEmpty = b => { for (let i = 0; i < 9; i++) for (let j = 0; j < 9; j++) if (b[i][j] === 0) return [i, j]; return null; };
+    const valid = (n, x, y, b) => {
+      for (let i = 0; i < 9; i++) if (b[x][i] === n || b[i][y] === n) return false;
+      const sr = 3 * Math.floor(x / 3), sc = 3 * Math.floor(y / 3);
+      for (let dx = 0; dx < 3; dx++) for (let dy = 0; dy < 3; dy++) if (b[sr + dx][sc + dy] === n) return false;
+      return true;
+    };
+    let steps = [];
+    function solve(b) {
+      if (!isSolving) return false;
+      const cell = firstEmpty(b);
+      if (!cell) return true;
+      const [x, y] = cell;
+      for (let n = 1; n <= 9; n++) {
+        if (!isSolving) return false;
+        if (valid(n, x, y, b)) {
+          steps.push({ x, y, n, act: 'placing' });
+          b[x][y] = n;
+          if (solve(b)) return true;
+          if (!isSolving) return false;
+          steps.push({ x, y, n, act: 'removing' });
+          b[x][y] = 0;
+        }
+      }
+      return false;
+    }
+    const shuffle = a => a.sort(() => Math.random() - 0.5);
+    function fill(b) {
+      const cell = firstEmpty(b);
+      if (!cell) return true;
+      const [x, y] = cell;
+      for (const n of shuffle([1,2,3,4,5,6,7,8,9])) {
+        if (valid(n, x, y, b)) {
+          b[x][y] = n;
+          if (fill(b)) return true;
+          b[x][y] = 0;
+        }
+      }
+      return false;
+    }
+    function gen(rem = 30) {
+      const full = Array.from({ length: 9 }, () => Array(9).fill(0));
+      fill(full);
+      const pu = copy(full);
+      let c = 0;
+      while (c < rem) {
+        const i = Math.floor(Math.random() * 9), j = Math.floor(Math.random() * 9);
+        if (pu[i][j]) { pu[i][j] = 0; c++; }
+      }
+      return { p: pu, s: full };
+    }
+    let board = [], init = [];
+    const blocksEl = document.getElementById('blocks');
+    function render() {
+      blocksEl.innerHTML = '';
+      for (let bi = 0; bi < 3; bi++) {
+        for (let bj = 0; bj < 3; bj++) {
+          const blockDiv = document.createElement('div');
+          blockDiv.className = 'block';
+          for (let i = 0; i < 3; i++) {
+            for (let j = 0; j < 3; j++) {
+              const gi = 3 * bi + i, gj = 3 * bj + j;
+              const inp = document.createElement('input');
+              inp.className = 'cell';
+              inp.maxLength = 1;
+              inp.value = board[gi][gj] || '';
+              inp.disabled = init[gi][gj] !== 0;
+              inp.addEventListener('input', e => {
+                const v = parseInt(e.target.value) || 0;
+                if (v >= 1 && v <= 9 && valid(v, gi, gj, board)) board[gi][gj] = v;
+                else { board[gi][gj] = 0; e.target.value = ''; }
+              });
+              blockDiv.appendChild(inp);
+            }
+          }
+          blocksEl.appendChild(blockDiv);
+        }
+      }
+    }
+    async function animate() {
+      for (const {x, y, n, act} of steps) {
+        if (!isSolving) break;
+        const bi = Math.floor(x/3), bj = Math.floor(y/3);
+        const blockDiv = blocksEl.children[bi*3 + bj];
+        const idx = (x%3)*3 + (y%3);
+        const cell = blockDiv.children[idx];
+        cell.classList.add('pop');
+        cell.value = act === 'placing' ? n : '';
+        cell.classList.add(act);
+        await new Promise(r => setTimeout(r, 150));
+        cell.classList.remove(act);
+        cell.classList.remove('pop');
+      }
+      isSolving = false;
+    }
+    document.getElementById('new-btn').onclick = () => { isSolving = false; const {p} = gen(); init = copy(p); board = copy(p); render(); };
+    document.getElementById('reset-btn').onclick = () => { isSolving = false; board = copy(init); render(); };
+    document.getElementById('solve-btn').onclick = async () => {
+      isSolving = true;
+      steps = [];
+      const working = copy(board);
+      if (!solve(working)) { alert('No solution!'); isSolving = false; return; }
+      board = copy(init);
+      render();
+      await animate();
+    };
+    window.onload = () => document.getElementById('new-btn').click();
+  </script>
+</body>
+</html>
